@@ -1,0 +1,55 @@
+# =====================================================================
+# Ambiente do ALUNO — Banco de Dados II (CCO072) — IESB 2026/2
+# Prof. Rodrigo Gonçalves
+#
+# PostgreSQL 16 + pgAdmin, com o banco "matricula" JÁ CARREGADO e
+# populado (modelo de matrícula + dados de aula). Pronto para usar.
+#
+# Versão 16 escolhida para compatibilidade com o DBeaver do laboratório.
+#
+# COMO USAR
+#   docker compose up -d       (sobe os serviços; na 1ª vez carrega o banco)
+#   docker compose down        (desliga; seus dados ficam salvos)
+#   docker compose down -v     (desliga e APAGA tudo — recarrega do zero)
+#
+# ACESSOS
+#   Banco   -> localhost:5432   usuário: bd2   senha: bd2   base: matricula
+#   pgAdmin -> http://localhost:8080   login: admin@iesb.br   senha: admin
+#
+# As tabelas estão no schema "academico" (não em "public"). No editor de
+# SQL, comece com:  SET search_path TO academico;
+# =====================================================================
+services:
+  postgres:
+    image: postgres:16
+    container_name: bd2_postgres
+    environment:
+      POSTGRES_USER: bd2
+      POSTGRES_PASSWORD: bd2
+      POSTGRES_DB: matricula
+    ports:
+      - "5432:5432"
+    volumes:
+      - bd2_dados:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bd2 -d matricula"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: bd2_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@iesb.br
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "8080:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  bd2_dados:
