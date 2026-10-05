@@ -1,218 +1,310 @@
--- =====================================================================
--- BANCO DE DADOS II  ·  CCO072  ·  IESB  ·  2026/2
--- Prof. Rodrigo Gonçalves Pinto
+-- ============================================================================
+-- BANCO DE DADOS II - DDL REFEITO COM BASE NO MODELO DO DRAW.IO
+-- Arquivo de referência: projeto_bdII(2)(2).drawio
+-- Base: PostgreSQL
 --
--- MODELO DE REFERÊNCIA — Sistema de Matrícula Acadêmica
--- Uso do professor (gabarito). NÃO distribuir aos alunos:
--- a escrita deste DDL é justamente o Marco 1 do projeto.
---
--- Testado em PostgreSQL 16.
--- Requer: CREATE EXTENSION btree_gist;
--- =====================================================================
+-- Observação:
+-- - A estrutura abaixo segue nomes, campos, tipos e relacionamentos mostrados
+--   no Draw.io.
+-- - pais_feriado.fk_id_feriado aparece sem tipo no Draw.io; o tipo integer foi
+--   inferido para compatibilizar com feriado.id_feriado (integer).
+-- - vinculo_t é mantido como tipo personalizado já presente no DDL original.
+-- ============================================================================
 
 DROP SCHEMA IF EXISTS academico CASCADE;
 CREATE SCHEMA academico;
 SET search_path TO academico, public;
 
-CREATE EXTENSION IF NOT EXISTS btree_gist;
+-- ============================================================================
+-- 1. TIPOS PERSONALIZADOS
+-- ============================================================================
 
--- ---------------------------------------------------------------------
--- 1. TIPOS E DOMÍNIOS
--- ---------------------------------------------------------------------
-CREATE TYPE turno_t       AS ENUM ('MATUTINO','VESPERTINO','NOTURNO');
-CREATE TYPE tipo_disc_t   AS ENUM ('OBRIGATORIA','OPTATIVA');
-CREATE TYPE vinculo_t     AS ENUM ('PRE_REQUISITO','CO_REQUISITO');
-CREATE TYPE status_mat_t  AS ENUM ('MATRICULADO','TRANCADO','CANCELADO');
-CREATE TYPE situacao_t    AS ENUM ('CURSANDO','APROVADO','REPROVADO_NOTA','REPROVADO_FALTA');
-CREATE TYPE tipo_sala_t   AS ENUM ('TEORICA','LABORATORIO');
-
-CREATE DOMAIN nota_t AS numeric(4,2) CHECK (VALUE >= 0 AND VALUE <= 10);
-CREATE DOMAIN pct_t  AS numeric(5,2) CHECK (VALUE >= 0 AND VALUE <= 100);
-
--- faixa de horário: exercita tipos de intervalo e restrições EXCLUDE
-CREATE TYPE timerange AS RANGE (subtype = time);
-
--- ---------------------------------------------------------------------
--- 2. ESTRUTURA INSTITUCIONAL
--- ---------------------------------------------------------------------
-CREATE TABLE campus (
-    id      smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    nome    varchar(60) NOT NULL UNIQUE,
-    cidade  varchar(60) NOT NULL
+CREATE TYPE vinculo_t AS ENUM (
+    'PRE_REQUISITO',
+    'CO_REQUISITO'
 );
 
+-- ============================================================================
+-- 2. ESTRUTURA GEOGRÁFICA
+-- ============================================================================
+
+CREATE TABLE pais (
+    id_pais       integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    codigo_pais   integer,
+    nome_pais     varchar(100)
+);
+
+CREATE TABLE estado (
+    id_estado    integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_pais      integer,
+    nome_estado  varchar(100),
+    municipio    varchar(100),
+
+    CONSTRAINT fk_estado_pais
+        FOREIGN KEY (id_pais)
+        REFERENCES pais (id_pais)
+);
+
+CREATE TABLE cidade (
+    id_cidade      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nome           varchar(100),
+    codigo_cidade  integer,
+    id_estado      integer,
+
+    CONSTRAINT fk_cidade_estado
+        FOREIGN KEY (id_estado)
+        REFERENCES estado (id_estado)
+);
+
+CREATE TABLE campus (
+    id_campus      smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nome_campus    varchar(60),
+    cep            varchar(9),
+    endereco       varchar(100),
+    telefone       varchar(15),
+    complementos   varchar(100),
+    qtd_blocos     smallint,
+    salas          smallint
+);
+
+CREATE TABLE predio (
+    id_predio    smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_cidade    integer,
+    qtd_predios  integer,
+    id_campus    smallint,
+
+    CONSTRAINT fk_predio_cidade
+        FOREIGN KEY (id_cidade)
+        REFERENCES cidade (id_cidade),
+
+    CONSTRAINT fk_predio_campus
+        FOREIGN KEY (id_campus)
+        REFERENCES campus (id_campus)
+);
+
+CREATE TABLE bloco (
+    id_bloco    smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_predio   smallint,
+
+    CONSTRAINT fk_bloco_predio
+        FOREIGN KEY (id_predio)
+        REFERENCES predio (id_predio)
+);
+
+-- ============================================================================
+-- 3. ESTRUTURA ACADÊMICA
+-- ============================================================================
+
 CREATE TABLE curso (
-    id         smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    codigo     varchar(10) NOT NULL UNIQUE,
-    nome       varchar(120) NOT NULL,
-    grau       varchar(20) NOT NULL
-               CHECK (grau IN ('BACHARELADO','LICENCIATURA','TECNOLOGO')),
-    ch_total   integer NOT NULL CHECK (ch_total > 0),
-    campus_id  smallint NOT NULL REFERENCES campus ON DELETE RESTRICT
+    id_curso    smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_campus   smallint,
+    codigo      varchar(10),
+    nome        varchar(120),
+    grau        varchar(120),
+    ch_total    smallint,
+
+    CONSTRAINT fk_curso_campus
+        FOREIGN KEY (id_campus)
+        REFERENCES campus (id_campus)
 );
 
 CREATE TABLE curriculo (
-    id            integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    curso_id      smallint NOT NULL REFERENCES curso ON DELETE CASCADE,
-    ano_vigencia  smallint NOT NULL CHECK (ano_vigencia BETWEEN 2000 AND 2100),
-    ativo         boolean  NOT NULL DEFAULT false,
-    UNIQUE (curso_id, ano_vigencia)
+    id_curriculo  smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ano_vigencia  smallint,
+    ativo         boolean,
+    id_curso      smallint,
+
+    CONSTRAINT fk_curriculo_curso
+        FOREIGN KEY (id_curso)
+        REFERENCES curso (id_curso)
 );
--- regra: no máximo um currículo ativo por curso (índice único parcial)
-CREATE UNIQUE INDEX uq_curriculo_ativo
-    ON curriculo (curso_id) WHERE ativo;
 
 CREATE TABLE disciplina (
-    id           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    codigo       varchar(10) NOT NULL UNIQUE,
-    nome         varchar(120) NOT NULL,
-    ch_teorica   smallint NOT NULL CHECK (ch_teorica >= 0),
-    ch_pratica   smallint NOT NULL CHECK (ch_pratica >= 0),
-    ch_total     smallint GENERATED ALWAYS AS (ch_teorica + ch_pratica) STORED,
-    ementa       text,
-    CHECK (ch_teorica + ch_pratica > 0)
+    id_disciplina  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    codigo         varchar(10),
+    nome           varchar(120),
+    ch_teorica     smallint,
+    ch_pratica     smallint,
+    ch_total       smallint,
+    ementa         text
 );
 
 CREATE TABLE curriculo_disciplina (
-    curriculo_id  integer NOT NULL REFERENCES curriculo ON DELETE CASCADE,
-    disciplina_id integer NOT NULL REFERENCES disciplina ON DELETE RESTRICT,
-    periodo       smallint NOT NULL CHECK (periodo BETWEEN 1 AND 12),
-    tipo          tipo_disc_t NOT NULL DEFAULT 'OBRIGATORIA',
-    PRIMARY KEY (curriculo_id, disciplina_id)
+    id_curriculo   smallint,
+    id_disciplina  integer,
+    periodo        smallint,
+    tipo           varchar(20),
+
+    CONSTRAINT pk_curriculo_disciplina
+        PRIMARY KEY (id_curriculo, id_disciplina),
+
+    CONSTRAINT fk_curriculo_disciplina_curriculo
+        FOREIGN KEY (id_curriculo)
+        REFERENCES curriculo (id_curriculo),
+
+    CONSTRAINT fk_curriculo_disciplina_disciplina
+        FOREIGN KEY (id_disciplina)
+        REFERENCES disciplina (id_disciplina)
 );
 
--- auto-relacionamento: alimenta a CTE recursiva de pré-requisitos
 CREATE TABLE pre_requisito (
-    disciplina_id integer NOT NULL REFERENCES disciplina ON DELETE CASCADE,
-    requisito_id  integer NOT NULL REFERENCES disciplina ON DELETE RESTRICT,
-    vinculo       vinculo_t NOT NULL DEFAULT 'PRE_REQUISITO',
-    PRIMARY KEY (disciplina_id, requisito_id),
-    CHECK (disciplina_id <> requisito_id)
+    id_disciplina  integer,
+    id_requisito   integer,
+    vinculo        vinculo_t,
+
+    CONSTRAINT pk_pre_requisito
+        PRIMARY KEY (id_disciplina, id_requisito),
+
+    CONSTRAINT fk_pre_requisito_disciplina
+        FOREIGN KEY (id_disciplina)
+        REFERENCES disciplina (id_disciplina),
+
+    CONSTRAINT fk_pre_requisito_requisito
+        FOREIGN KEY (id_requisito)
+        REFERENCES disciplina (id_disciplina)
 );
 
 CREATE TABLE professor (
-    id         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    matricula  varchar(12) NOT NULL UNIQUE,
-    nome       varchar(120) NOT NULL,
-    email      varchar(120) NOT NULL UNIQUE
-               CHECK (email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[a-z]{2,}$'),
-    titulacao  varchar(20) NOT NULL
-               CHECK (titulacao IN ('ESPECIALISTA','MESTRE','DOUTOR'))
+    id_professor  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    matricula     varchar(12) UNIQUE,
+    nome          varchar(120),
+    email         varchar(120),
+    titulacao     varchar(20)
 );
 
-CREATE TABLE sala (
-    id          integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    campus_id   smallint NOT NULL REFERENCES campus ON DELETE RESTRICT,
-    codigo      varchar(10) NOT NULL,
-    capacidade  smallint NOT NULL CHECK (capacidade > 0),
-    tipo        tipo_sala_t NOT NULL DEFAULT 'TEORICA',
-    UNIQUE (campus_id, codigo)
-);
+-- ============================================================================
+-- 4. OFERTA DE DISCIPLINAS
+-- ============================================================================
 
--- ---------------------------------------------------------------------
--- 3. OFERTA
--- ---------------------------------------------------------------------
 CREATE TABLE periodo_letivo (
-    id           smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    ano          smallint NOT NULL,
-    semestre     smallint NOT NULL CHECK (semestre IN (1,2)),
-    data_inicio  date NOT NULL,
-    data_fim     date NOT NULL,
-    UNIQUE (ano, semestre),
-    CHECK (data_fim > data_inicio)
-);
-
-CREATE TABLE feriado (
-    id         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    data       date NOT NULL,
-    descricao  varchar(120) NOT NULL,
-    campus_id  smallint REFERENCES campus ON DELETE CASCADE,  -- NULL = todos
-    UNIQUE (data, campus_id)
+    id_periodo_letivo  smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ano                smallint,
+    semestre           smallint,
+    data_inicio        date,
+    data_fim           date
 );
 
 CREATE TABLE turma (
-    id                 integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    codigo             varchar(15) NOT NULL,
-    disciplina_id      integer  NOT NULL REFERENCES disciplina ON DELETE RESTRICT,
-    periodo_letivo_id  smallint NOT NULL REFERENCES periodo_letivo ON DELETE RESTRICT,
-    professor_id       integer  REFERENCES professor ON DELETE SET NULL,
-    turno              turno_t  NOT NULL,
-    vagas              smallint NOT NULL CHECK (vagas > 0),
-    UNIQUE (codigo, periodo_letivo_id, disciplina_id)
+    id_turma          integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_disciplina     integer,
+    id_professor      integer,
+    id_periodo_letivo smallint,
+    turno             varchar(10),
+    codigo            varchar(15),
+
+    CONSTRAINT fk_turma_disciplina
+        FOREIGN KEY (id_disciplina)
+        REFERENCES disciplina (id_disciplina),
+
+    CONSTRAINT fk_turma_professor
+        FOREIGN KEY (id_professor)
+        REFERENCES professor (id_professor),
+
+    CONSTRAINT fk_turma_periodo
+        FOREIGN KEY (id_periodo_letivo)
+        REFERENCES periodo_letivo (id_periodo_letivo)
 );
 
-CREATE TABLE turma_horario (
-    id          integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    turma_id    integer NOT NULL REFERENCES turma ON DELETE CASCADE,
-    sala_id     integer NOT NULL REFERENCES sala ON DELETE RESTRICT,
-    dia_semana  smallint NOT NULL CHECK (dia_semana BETWEEN 1 AND 7), -- 1=domingo
-    faixa       timerange NOT NULL,
-    CHECK (NOT isempty(faixa))
+CREATE TABLE sala (
+    id_sala      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    codigo       varchar(10),
+    capacidade   smallint,
+    tipo         varchar(30),
+    id_bloco     smallint,
+
+    CONSTRAINT fk_sala_bloco
+        FOREIGN KEY (id_bloco)
+        REFERENCES bloco (id_bloco)
 );
 
--- uma sala não pode receber duas turmas no mesmo dia e horário
-ALTER TABLE turma_horario
-    ADD CONSTRAINT ex_sala_ocupada
-    EXCLUDE USING gist (sala_id WITH =, dia_semana WITH =, faixa WITH &&);
+-- ============================================================================
+-- 5. VIDA ACADÊMICA
+-- ============================================================================
 
--- ---------------------------------------------------------------------
--- 4. VIDA ACADÊMICA
--- ---------------------------------------------------------------------
 CREATE TABLE aluno (
-    id            integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    matricula     varchar(12) NOT NULL UNIQUE,
-    nome          varchar(120) NOT NULL,
-    cpf           char(11) NOT NULL UNIQUE CHECK (cpf ~ '^[0-9]{11}$'),
-    email         varchar(120) NOT NULL UNIQUE,
-    nascimento    date NOT NULL CHECK (nascimento < CURRENT_DATE),
-    curso_id      smallint NOT NULL REFERENCES curso ON DELETE RESTRICT,
-    curriculo_id  integer  NOT NULL REFERENCES curriculo ON DELETE RESTRICT,
-    ingresso      date NOT NULL,
-    ativo         boolean NOT NULL DEFAULT true
+    id_aluno      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_curriculo  smallint,
+    nome          varchar(120),
+    cpf           char(11),
+    email         varchar(120) UNIQUE,
+    nascimento    date,
+
+    CONSTRAINT fk_aluno_curriculo
+        FOREIGN KEY (id_curriculo)
+        REFERENCES curriculo (id_curriculo)
 );
 
 CREATE TABLE matricula (
-    id              integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    aluno_id        integer NOT NULL REFERENCES aluno  ON DELETE CASCADE,
-    turma_id        integer NOT NULL REFERENCES turma  ON DELETE RESTRICT,
-    data_matricula  timestamptz NOT NULL DEFAULT now(),
-    status          status_mat_t NOT NULL DEFAULT 'MATRICULADO',
-    UNIQUE (aluno_id, turma_id)
+    id_matricula   integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_aluno       integer,
+    id_turma       integer,
+    data_matricula date,
+    status         varchar(15),
+
+    CONSTRAINT uq_matricula_aluno_turma
+        UNIQUE (id_aluno, id_turma),
+
+    CONSTRAINT fk_matricula_aluno
+        FOREIGN KEY (id_aluno)
+        REFERENCES aluno (id_aluno),
+
+    CONSTRAINT fk_matricula_turma
+        FOREIGN KEY (id_turma)
+        REFERENCES turma (id_turma)
 );
 
 CREATE TABLE historico (
-    id            integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    matricula_id  integer NOT NULL UNIQUE REFERENCES matricula ON DELETE CASCADE,
-    nota_a1       nota_t,
-    nota_a2       nota_t,
-    nota_p3       nota_t,
-    frequencia    pct_t NOT NULL DEFAULT 100,
-    situacao      situacao_t NOT NULL DEFAULT 'CURSANDO',
-    -- MF = 0,4*A1 + 0,6*A2 ; com P3, substitui a média menos favorável
-    media_final numeric(4,2) GENERATED ALWAYS AS (
-        CASE
-          WHEN nota_a1 IS NULL OR nota_a2 IS NULL THEN NULL
-          WHEN nota_p3 IS NULL THEN round(0.4*nota_a1 + 0.6*nota_a2, 2)
-          ELSE round(greatest(0.4*nota_p3 + 0.6*nota_a2,
-                              0.4*nota_a1 + 0.6*nota_p3), 2)
-        END
-    ) STORED
+    id_historico  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_matricula  integer,
+    n1             numeric,
+    media_final    numeric,
+    frequencia     numeric,
+    situacao       varchar(15),
+
+    CONSTRAINT fk_historico_matricula
+        FOREIGN KEY (id_matricula)
+        REFERENCES matricula (id_matricula)
 );
 
--- trilha de auditoria: alvo do índice BRIN e do particionamento (bônus)
+-- ============================================================================
+-- 6. FERIADOS
+-- ============================================================================
+
+CREATE TABLE feriado (
+    id_feriado  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    data        date,
+    descricao   varchar(120)
+);
+
+CREATE TABLE pais_feriado (
+    fk_id_pais     integer,
+    fk_id_feriado  integer,
+
+    CONSTRAINT pk_pais_feriado
+        PRIMARY KEY (fk_id_pais, fk_id_feriado),
+
+    CONSTRAINT fk_pais_feriado_pais
+        FOREIGN KEY (fk_id_pais)
+        REFERENCES pais (id_pais),
+
+    CONSTRAINT fk_pais_feriado_feriado
+        FOREIGN KEY (fk_id_feriado)
+        REFERENCES feriado (id_feriado)
+);
+
+-- ============================================================================
+-- 7. AUDITORIA
+-- ============================================================================
+
 CREATE TABLE log_matricula (
-    id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    matricula_id  integer NOT NULL,
-    acao          varchar(20) NOT NULL,
-    ocorrido_em   timestamptz NOT NULL DEFAULT now(),
-    usuario       name NOT NULL DEFAULT CURRENT_USER,
-    detalhe       jsonb
+    id_log        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_matricula  integer,
+    acao          varchar(20),
+    ocorrido_em   timestamp,
+    usuario       varchar(60),
+    detalhe       text,
+
+    CONSTRAINT fk_log_matricula_matricula
+        FOREIGN KEY (id_matricula)
+        REFERENCES matricula (id_matricula)
 );
-
--- ---------------------------------------------------------------------
-
--- ================================================================
--- MARCO 1 — DDL COMPLETO
--- ================================================================
--- O Marco 1 exige a estrutura, tipos e restrições de integridade.
--- Índices, views, transações, segurança e backup ficam para o Marco 2.
