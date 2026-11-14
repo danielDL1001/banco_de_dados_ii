@@ -1,0 +1,175 @@
+COMO RODAR O CLOUDBEAVER E O PGADMIN - BANCO DE DADOS I
+Prof. Rodrigo Gonçalves Pinto - IESB
+==========================================================
+
+O CloudBeaver e o pgAdmin são ferramentas para usar o banco de dados pelo
+navegador. Os dois vão rodar NO SEU COMPUTADOR, ao lado do banco bd1_postgres
+que você já baixou. Você pode usar os dois ou só um deles.
+
+ANTES DE COMEÇAR
+- O Docker Desktop precisa estar ABERTO (ícone da baleia verde).
+
+
+PASSO 1 - CONFERIR SE O BANCO ESTÁ RODANDO
+----------------------------------------------------------
+Abra o terminal (menu Iniciar > digite "Terminal" ou "PowerShell" > Enter)
+e digite:
+
+    docker ps
+
+Tem que aparecer uma linha com  bd1_postgres  e o status  Up.
+
+Se NÃO aparecer:
+  1. Abra a pasta bd1_alunos.
+  2. Clique com o botão direito dentro da pasta > "Abrir no Terminal".
+  3. Digite:   docker compose up -d
+  4. Rode  docker ps  de novo e confira.
+
+
+==========================================================
+PARTE A - CLOUDBEAVER
+==========================================================
+
+PASSO A1 - LIGAR O CLOUDBEAVER
+----------------------------------------------------------
+No terminal, copie e cole este comando (tudo numa linha só):
+
+    docker run -d --name cloudbeaver -p 8978:8978 dbeaver/cloudbeaver:latest
+
+Na primeira vez ele baixa o programa. Pode demorar alguns minutos.
+Espere voltar o cursor do terminal.
+
+
+PASSO A2 - ABRIR NO NAVEGADOR
+----------------------------------------------------------
+Abra o Chrome (ou outro navegador) e digite na barra de endereço:
+
+    http://localhost:8978
+
+Se a página não abrir, espere 1 minuto e atualize (F5).
+O CloudBeaver demora um pouco para ligar na primeira vez.
+
+
+PASSO A3 - CADASTRO INICIAL (só na primeira vez)
+----------------------------------------------------------
+Vai abrir um assistente de configuração.
+  1. Clique em  Next.
+  2. Crie o usuário administrador:
+       Login:  admin
+       Senha:  escolha uma senha e ANOTE
+  3. Clique em  Next  e depois em  Finish.
+  4. Faça login com o usuário e a senha que você criou.
+
+
+PASSO A4 - CONECTAR NO BANCO
+----------------------------------------------------------
+  1. Clique no  +  (canto superior esquerdo) > New Connection.
+  2. Escolha  PostgreSQL.
+  3. Preencha EXATAMENTE assim:
+
+       Host ......... host.docker.internal
+       Porta ........ 5433
+       Database ..... postgres
+       Usuário ...... postgres
+       Senha ........ iesb2026
+
+  4. Marque a opção  Show all databases  (para ver todos os bancos).
+  5. Clique em  Test Connection.  Tem que aparecer "Connected" / sucesso.
+  6. Clique em  Create.
+
+Pronto! O banco aparece na lateral esquerda.
+
+
+==========================================================
+PARTE B - PGADMIN
+==========================================================
+
+PASSO B1 - LIGAR O PGADMIN
+----------------------------------------------------------
+No terminal, copie e cole este comando (tudo numa linha só):
+
+    docker run -d --name pgadmin -p 5050:80 -e PGADMIN_DEFAULT_EMAIL=aluno@iesb.br -e PGADMIN_DEFAULT_PASSWORD=iesb2026 dpage/pgadmin4
+
+Na primeira vez ele baixa o programa. Pode demorar alguns minutos.
+
+
+PASSO B2 - ABRIR NO NAVEGADOR
+----------------------------------------------------------
+Digite na barra de endereço:
+
+    http://localhost:5050
+
+Se a página não abrir, espere 1 minuto e atualize (F5).
+
+Faça login com:
+       E-mail:  aluno@iesb.br
+       Senha:   iesb2026
+
+
+PASSO B3 - CONECTAR NO BANCO
+----------------------------------------------------------
+  1. Clique com o botão direito em  Servers  (lateral esquerda)
+     > Register > Server.
+  2. Aba  General:
+       Name ......... bd1   (pode ser qualquer nome)
+  3. Aba  Connection:  preencha EXATAMENTE assim:
+
+       Host name/address ... host.docker.internal
+       Port ................ 5433
+       Maintenance database  postgres
+       Username ............ postgres
+       Password ............ iesb2026
+
+  4. Marque  Save password.
+  5. Clique em  Save.
+
+Pronto! Abra  Servers > bd1 > Databases  para ver os bancos.
+
+
+==========================================================
+ATENÇÃO (vale para os dois)
+==========================================================
+- No Host NÃO use "localhost". Use  host.docker.internal
+- A porta é 5433, e NÃO 5432.
+
+
+NA PRÓXIMA AULA
+----------------------------------------------------------
+Não precisa repetir tudo. Com o Docker Desktop aberto, rode no terminal:
+
+    docker start bd1_postgres
+    docker start cloudbeaver
+    docker start pgadmin
+
+E abra de novo:
+    CloudBeaver ...  http://localhost:8978
+    pgAdmin .......  http://localhost:5050
+
+Seus usuários e suas conexões continuam salvos.
+
+
+DEU PROBLEMA?
+----------------------------------------------------------
+"docker: command not found" ou "cannot connect to the Docker daemon"
+   -> O Docker Desktop está fechado. Abra e espere a baleia ficar verde.
+
+"The container name /cloudbeaver is already in use"
+(ou "/pgadmin is already in use")
+   -> Você já criou esse programa antes. Rode só:
+      docker start cloudbeaver     (ou  docker start pgadmin)
+
+"port is already allocated"
+   -> A porta está ocupada por outro programa.
+   CloudBeaver: troque  -p 8978:8978  por  -p 8979:8978
+                e abra  http://localhost:8979
+   pgAdmin:     troque  -p 5050:80    por  -p 5051:80
+                e abra  http://localhost:5051
+
+"Connection refused" ou "Unable to connect" ao conectar no banco
+   -> Confira: Host = host.docker.internal e Porta = 5433.
+   -> Confira se o bd1_postgres está rodando (Passo 1).
+
+Esqueceu a senha do admin do CloudBeaver
+   -> Apague e crie de novo (os bancos NÃO são apagados):
+      docker rm -f cloudbeaver
+      e repita a partir do Passo A1.
