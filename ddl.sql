@@ -1,36 +1,58 @@
 -- ============================================================================
--- BANCO DE DADOS II - MODELO FÍSICO (DDL ÚNICO)
+-- BANCO DE DADOS II - MODELO FÍSICO + CARGA + CONSULTAS
 -- Arquivo de referência: projeto_bdII.drawio (modelo lógico)
--- Base: PostgreSQL 16/17
+-- Base: PostgreSQL 16/17 (pgAdmin 4)
 --
--- Observações:
--- Aluno: Daniel, Alexandre, Kalel
+-- Alunos:
+--   Daniel Dias (2512130060)
+--   Alexandre Oliveira (2512130030)
+--   Kalel Lucas (2512130038)
 -- ============================================================================
 
-DROP SCHEMA IF EXISTS academico CASCADE;
-CREATE SCHEMA academico;
+-- ============================================================================
+-- BANCO DE DADOS II - MODELO FÍSICO (DDL ÚNICO)
+--
+-- ARQUIVO IDEMPOTENTE: pode ser executado várias vezes (ou por partes) sem erro
+-- e sem apagar dados: schema, tipo, tabelas, índices e cargas usam IF NOT EXISTS /
+-- NOT EXISTS / ON CONFLICT DO NOTHING.
+-- ============================================================================
+
+-- Para APAGAR TUDO e recomeçar do zero (cuidado: destrói os dados), descomente:
+-- DROP SCHEMA IF EXISTS academico CASCADE;
+
+CREATE SCHEMA IF NOT EXISTS academico;
 SET search_path TO academico, public;
 
 -- ============================================================================
 -- 1. TIPOS PERSONALIZADOS
 -- ============================================================================
 
-CREATE TYPE vinculo_t AS ENUM (
-    'PRE_REQUISITO',
-    'CO_REQUISITO'
-);
+-- CREATE TYPE não aceita IF NOT EXISTS: protegemos com um bloco DO.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1
+                   FROM pg_type t
+                   JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'vinculo_t' AND n.nspname = 'academico') THEN
+        CREATE TYPE academico.vinculo_t AS ENUM (
+            'PRE_REQUISITO',
+            'CO_REQUISITO'
+        );
+    END IF;
+END
+$$;
 
 -- ============================================================================
 -- 2. ESTRUTURA GEOGRÁFICA
 -- ============================================================================
 
-CREATE TABLE pais (
+CREATE TABLE IF NOT EXISTS pais (
     id_pais       integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nome_pais     varchar(100) NOT NULL,
     codigo_pais   integer
 );
 
-CREATE TABLE estado (
+CREATE TABLE IF NOT EXISTS estado (
     id_estado    integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_pais      integer NOT NULL,
     nome_estado  varchar(100) NOT NULL,
@@ -41,7 +63,7 @@ CREATE TABLE estado (
         REFERENCES pais (id_pais)
 );
 
-CREATE TABLE cidade (
+CREATE TABLE IF NOT EXISTS cidade (
     id_cidade      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_estado      integer NOT NULL,
     nome           varchar(100) NOT NULL,
@@ -56,7 +78,7 @@ CREATE TABLE cidade (
 -- 3. ESTRUTURA FÍSICA DA INSTITUIÇÃO
 -- ============================================================================
 
-CREATE TABLE campus (
+CREATE TABLE IF NOT EXISTS campus (
     id_campus      smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_cidade      integer NOT NULL,
     nome_campus    varchar(60) NOT NULL,
@@ -72,7 +94,7 @@ CREATE TABLE campus (
         REFERENCES cidade (id_cidade)
 );
 
-CREATE TABLE predio (
+CREATE TABLE IF NOT EXISTS predio (
     id_predio    smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_campus    smallint NOT NULL,
     qtd_predios  integer,
@@ -82,7 +104,7 @@ CREATE TABLE predio (
         REFERENCES campus (id_campus)
 );
 
-CREATE TABLE bloco (
+CREATE TABLE IF NOT EXISTS bloco (
     id_bloco    smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_predio   smallint NOT NULL,
 
@@ -91,7 +113,7 @@ CREATE TABLE bloco (
         REFERENCES predio (id_predio)
 );
 
-CREATE TABLE sala (
+CREATE TABLE IF NOT EXISTS sala (
     id_sala      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_bloco     smallint NOT NULL,
     codigo       varchar(10) NOT NULL,
@@ -110,7 +132,7 @@ CREATE TABLE sala (
 -- 4. ESTRUTURA ACADÊMICA
 -- ============================================================================
 
-CREATE TABLE curso (
+CREATE TABLE IF NOT EXISTS curso (
     id_curso    smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_campus   smallint,
     codigo      varchar(10) NOT NULL,
@@ -126,7 +148,7 @@ CREATE TABLE curso (
         CHECK (ch_total IS NULL OR ch_total > 0)
 );
 
-CREATE TABLE campus_curso (
+CREATE TABLE IF NOT EXISTS campus_curso (
     fk_id_campus  smallint,
     fk_id_curso   smallint,
 
@@ -142,7 +164,7 @@ CREATE TABLE campus_curso (
         REFERENCES curso (id_curso)
 );
 
-CREATE TABLE curriculo (
+CREATE TABLE IF NOT EXISTS curriculo (
     id_curriculo  smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_curso      smallint NOT NULL,
     ano_vigencia  smallint,
@@ -153,7 +175,7 @@ CREATE TABLE curriculo (
         REFERENCES curso (id_curso)
 );
 
-CREATE TABLE disciplina (
+CREATE TABLE IF NOT EXISTS disciplina (
     id_disciplina  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     codigo         varchar(10) NOT NULL,
     nome           varchar(120) NOT NULL,
@@ -170,7 +192,7 @@ CREATE TABLE disciplina (
         )
 );
 
-CREATE TABLE curriculo_disciplina (
+CREATE TABLE IF NOT EXISTS curriculo_disciplina (
     id_curriculo   smallint,
     id_disciplina  integer,
     tipo           varchar(20),
@@ -188,7 +210,7 @@ CREATE TABLE curriculo_disciplina (
         REFERENCES disciplina (id_disciplina)
 );
 
-CREATE TABLE pre_requisito (
+CREATE TABLE IF NOT EXISTS pre_requisito (
     id_disciplina  integer,
     id_requisito   integer,
     vinculo        academico.vinculo_t,
@@ -208,7 +230,7 @@ CREATE TABLE pre_requisito (
         CHECK (id_disciplina <> id_requisito)
 );
 
-CREATE TABLE professor (
+CREATE TABLE IF NOT EXISTS professor (
     id_professor  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     matricula     varchar(12) NOT NULL UNIQUE,
     nome          varchar(120) NOT NULL,
@@ -220,7 +242,7 @@ CREATE TABLE professor (
 -- 5. OFERTA DE DISCIPLINAS
 -- ============================================================================
 
-CREATE TABLE periodo_letivo (
+CREATE TABLE IF NOT EXISTS periodo_letivo (
     id_periodo_letivo  smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     ano                smallint NOT NULL,
     semestre           smallint NOT NULL,
@@ -234,7 +256,7 @@ CREATE TABLE periodo_letivo (
         CHECK (data_fim IS NULL OR data_inicio IS NULL OR data_fim >= data_inicio)
 );
 
-CREATE TABLE turma (
+CREATE TABLE IF NOT EXISTS turma (
     id_turma           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_disciplina      integer NOT NULL,
     id_professor       integer,
@@ -259,7 +281,7 @@ CREATE TABLE turma (
 -- 6. VIDA ACADÊMICA
 -- ============================================================================
 
-CREATE TABLE aluno (
+CREATE TABLE IF NOT EXISTS aluno (
     id_aluno         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nome             varchar(100) NOT NULL,
     email            varchar(100),
@@ -267,7 +289,7 @@ CREATE TABLE aluno (
     telefone_aluno   char(11)
 );
 
-CREATE TABLE matricula (
+CREATE TABLE IF NOT EXISTS matricula (
     id_matricula    integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_aluno        integer NOT NULL,
     id_turma        integer NOT NULL,
@@ -287,7 +309,7 @@ CREATE TABLE matricula (
 );
 
 -- historico é 1:1 com matricula (ERone no Draw.io)
-CREATE TABLE historico (
+CREATE TABLE IF NOT EXISTS historico (
     id_historico  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_matricula  integer NOT NULL UNIQUE,
     situacao      varchar(15),
@@ -317,13 +339,13 @@ CREATE TABLE historico (
 -- 7. FERIADOS
 -- ============================================================================
 
-CREATE TABLE feriado (
+CREATE TABLE IF NOT EXISTS feriado (
     id_feriado  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     descricao   varchar(120) NOT NULL,
     data        date NOT NULL
 );
 
-CREATE TABLE pais_feriado (
+CREATE TABLE IF NOT EXISTS pais_feriado (
     fk_id_pais     integer,
     fk_id_feriado  integer,
 
@@ -343,7 +365,7 @@ CREATE TABLE pais_feriado (
 -- 8. AUDITORIA
 -- ============================================================================
 
-CREATE TABLE log_matricula (
+CREATE TABLE IF NOT EXISTS log_matricula (
     id_log        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     id_matricula  integer NOT NULL,
     acao          varchar(20),
@@ -360,27 +382,33 @@ CREATE TABLE log_matricula (
 -- 9. ÍNDICES DE APOIO (colunas de chave estrangeira usadas em junções)
 -- ============================================================================
 
-CREATE INDEX ix_estado_pais              ON estado (id_pais);
-CREATE INDEX ix_cidade_estado            ON cidade (id_estado);
-CREATE INDEX ix_campus_cidade            ON campus (id_cidade);
-CREATE INDEX ix_predio_campus            ON predio (id_campus);
-CREATE INDEX ix_bloco_predio             ON bloco (id_predio);
-CREATE INDEX ix_sala_bloco               ON sala (id_bloco);
-CREATE INDEX ix_curso_campus             ON curso (id_campus);
-CREATE INDEX ix_campus_curso_curso       ON campus_curso (fk_id_curso);
-CREATE INDEX ix_curriculo_curso          ON curriculo (id_curso);
-CREATE INDEX ix_curriculo_disc_disciplina ON curriculo_disciplina (id_disciplina);
-CREATE INDEX ix_pre_requisito_requisito  ON pre_requisito (id_requisito);
-CREATE INDEX ix_turma_disciplina         ON turma (id_disciplina);
-CREATE INDEX ix_turma_professor          ON turma (id_professor);
-CREATE INDEX ix_turma_periodo            ON turma (id_periodo_letivo);
-CREATE INDEX ix_matricula_turma          ON matricula (id_turma);
-CREATE INDEX ix_pais_feriado_feriado     ON pais_feriado (fk_id_feriado);
-CREATE INDEX ix_log_matricula_matricula  ON log_matricula (id_matricula);
+CREATE INDEX IF NOT EXISTS ix_estado_pais              ON estado (id_pais);
+CREATE INDEX IF NOT EXISTS ix_cidade_estado            ON cidade (id_estado);
+CREATE INDEX IF NOT EXISTS ix_campus_cidade            ON campus (id_cidade);
+CREATE INDEX IF NOT EXISTS ix_predio_campus            ON predio (id_campus);
+CREATE INDEX IF NOT EXISTS ix_bloco_predio             ON bloco (id_predio);
+CREATE INDEX IF NOT EXISTS ix_sala_bloco               ON sala (id_bloco);
+CREATE INDEX IF NOT EXISTS ix_curso_campus             ON curso (id_campus);
+CREATE INDEX IF NOT EXISTS ix_campus_curso_curso       ON campus_curso (fk_id_curso);
+CREATE INDEX IF NOT EXISTS ix_curriculo_curso          ON curriculo (id_curso);
+CREATE INDEX IF NOT EXISTS ix_curriculo_disc_disciplina ON curriculo_disciplina (id_disciplina);
+CREATE INDEX IF NOT EXISTS ix_pre_requisito_requisito  ON pre_requisito (id_requisito);
+CREATE INDEX IF NOT EXISTS ix_turma_disciplina         ON turma (id_disciplina);
+CREATE INDEX IF NOT EXISTS ix_turma_professor          ON turma (id_professor);
+CREATE INDEX IF NOT EXISTS ix_turma_periodo            ON turma (id_periodo_letivo);
+CREATE INDEX IF NOT EXISTS ix_matricula_turma          ON matricula (id_turma);
+CREATE INDEX IF NOT EXISTS ix_pais_feriado_feriado     ON pais_feriado (fk_id_feriado);
+CREATE INDEX IF NOT EXISTS ix_log_matricula_matricula  ON log_matricula (id_matricula);
 
---+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+-- ############################################################################
+-- PARTE 2 - CARGA DE DADOS (idempotente)
+-- ############################################################################
+
+SET search_path TO academico, public;
+
 -- ----------------------------------------------------------------------------
--- 0. TABELAS TEMPORÁRIAS DE APOIO (somem sozinhas no COMMIT)
+-- 0. TABELAS TEMPORÁRIAS DE APOIO (valem enquanto a aba/sessão do pgAdmin estiver aberta)
 -- ----------------------------------------------------------------------------
 
 -- 0.1 Matriz curricular de Ciência da Computação (conforme o PDF)
@@ -389,18 +417,13 @@ CREATE INDEX ix_log_matricula_matricula  ON log_matricula (id_matricula);
 -- Disciplinas DIGITAIS: 3h/45 dias = 51T/9P ; 3h/20 dias = 42T/18P
 --   (valores obtidos fechando os totais de teórica/prática de cada módulo do PDF).
 -- Projeto Integrador 2A: PDF não detalha a divisão; assumido 10T/50P.
-
-BEGIN;
-
-SET search_path TO academico, public;
-
-CREATE TEMP TABLE tmp_matriz (
+CREATE TEMP TABLE IF NOT EXISTS tmp_matriz (
     periodo  smallint,
     eixo     varchar(20),
     nome     varchar(120),
     ch_t     smallint,
     ch_p     smallint
-) ON COMMIT DROP;
+);
 
 INSERT INTO tmp_matriz (periodo, eixo, nome, ch_t, ch_p)
 SELECT * FROM (VALUES
@@ -470,10 +493,11 @@ SELECT * FROM (VALUES
  -- Disciplinas eletivas (60h cada; cursadas no 4A no lugar de "Eletiva")
  (7,'ELETIVA','Interface Homem-Computador',60,0),
  (7,'ELETIVA','Libras',60,0)
-) AS v(periodo, eixo, nome, ch_t, ch_p);
+) AS v(periodo, eixo, nome, ch_t, ch_p)
+WHERE NOT EXISTS (SELECT 1 FROM tmp_matriz);
 
 -- 0.2 Listas de nomes para gerar professores e alunos
-CREATE TEMP TABLE tmp_nome ON COMMIT DROP AS
+CREATE TEMP TABLE IF NOT EXISTS tmp_nome AS
 SELECT t.nome, t.rn::int AS rn
 FROM unnest(ARRAY[
   'Ana','Bruno','Carla','Daniel','Eduarda','Felipe','Gabriela','Henrique',
@@ -481,7 +505,7 @@ FROM unnest(ARRAY[
   'Quitéria','Rafael','Sofia','Thiago','Úrsula','Vitor','Wanessa','Yuri'
 ]) WITH ORDINALITY AS t(nome, rn);
 
-CREATE TEMP TABLE tmp_sobrenome ON COMMIT DROP AS
+CREATE TEMP TABLE IF NOT EXISTS tmp_sobrenome AS
 SELECT t.sobrenome, t.rn::int AS rn
 FROM unnest(ARRAY[
   'Silva','Santos','Oliveira','Souza','Rodrigues','Ferreira','Alves','Pereira',
@@ -490,12 +514,12 @@ FROM unnest(ARRAY[
 ]) WITH ORDINALITY AS t(sobrenome, rn);
 
 -- 0.3 Feriados: (país, descrição, mês, dia)
-CREATE TEMP TABLE tmp_feriado (
+CREATE TEMP TABLE IF NOT EXISTS tmp_feriado (
     pais       varchar(100),
     descricao  varchar(120),
     mes        integer,
     dia        integer
-) ON COMMIT DROP;
+);
 
 INSERT INTO tmp_feriado (pais, descricao, mes, dia)
 SELECT * FROM (VALUES
@@ -516,7 +540,8 @@ SELECT * FROM (VALUES
  ('Portugal','Dia de Portugal',6,10),
  ('Portugal','Natal (Portugal)',12,25),
  ('Uruguai','Declaratoria de la Independencia',8,25)
-) AS v(pais, descricao, mes, dia);
+) AS v(pais, descricao, mes, dia)
+WHERE NOT EXISTS (SELECT 1 FROM tmp_feriado);
 
 -- ----------------------------------------------------------------------------
 -- 1. PAÍS, ESTADO, CIDADE
@@ -526,7 +551,8 @@ INSERT INTO pais (nome_pais, codigo_pais)
 SELECT * FROM (VALUES
   ('Brasil',55),('Argentina',54),('Portugal',351),('Estados Unidos',1),
   ('Uruguai',598),('Paraguai',595),('Chile',56),('Colômbia',57)
-) AS v(nome_pais, codigo_pais);
+) AS v(nome_pais, codigo_pais)
+WHERE NOT EXISTS (SELECT 1 FROM pais p2 WHERE p2.nome_pais = v.nome_pais);
 
 -- Técnica: INNER JOIN - o nome do país da lista é ligado à PK de "pais".
 -- Como ler: "para cada estado brasileiro da lista, grave o id do Brasil".
@@ -544,7 +570,8 @@ FROM (VALUES
   ('Roraima','Boa Vista'),('Santa Catarina','Florianópolis'),
   ('São Paulo','São Paulo'),('Sergipe','Aracaju'),('Tocantins','Palmas')
 ) AS v(nome_estado, capital)
-JOIN pais p ON p.nome_pais = 'Brasil';
+JOIN pais p ON p.nome_pais = 'Brasil'
+WHERE NOT EXISTS (SELECT 1 FROM estado x WHERE x.id_pais = p.id_pais AND x.nome_estado = v.nome_estado);
 
 INSERT INTO estado (id_pais, nome_estado, municipio)
 SELECT p.id_pais, v.nome_estado, v.capital
@@ -555,13 +582,15 @@ FROM (VALUES
   ('Estados Unidos','Califórnia','Sacramento'),
   ('Uruguai','Montevidéu','Montevidéu')
 ) AS v(pais, nome_estado, capital)
-JOIN pais p ON p.nome_pais = v.pais;
+JOIN pais p ON p.nome_pais = v.pais
+WHERE NOT EXISTS (SELECT 1 FROM estado x WHERE x.id_pais = p.id_pais AND x.nome_estado = v.nome_estado);
 
 -- Uma cidade (a sede/capital) para cada estado
 INSERT INTO cidade (id_estado, nome, codigo_cidade)
 SELECT e.id_estado, e.municipio, 1000 + e.id_estado
 FROM estado e
-WHERE e.municipio IS NOT NULL;
+WHERE e.municipio IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM cidade c WHERE c.id_estado = e.id_estado AND c.nome = e.municipio);
 
 -- Cidades do DF e do entorno
 INSERT INTO cidade (id_estado, nome, codigo_cidade)
@@ -574,7 +603,8 @@ FROM (VALUES
   ('Goiás','Anápolis'),('Goiás','Luziânia'),('Goiás','Formosa'),
   ('Goiás','Valparaíso de Goiás'),('Goiás','Águas Lindas de Goiás')
 ) AS v(uf, cidade)
-JOIN estado e ON e.nome_estado = v.uf;
+JOIN estado e ON e.nome_estado = v.uf
+WHERE NOT EXISTS (SELECT 1 FROM cidade c WHERE c.id_estado = e.id_estado AND c.nome = v.cidade);
 
 -- ----------------------------------------------------------------------------
 -- 2. ESTRUTURA FÍSICA: campus -> prédio -> bloco -> sala
@@ -590,13 +620,15 @@ FROM (VALUES
   ('Campus Águas Claras', 'Águas Claras', 'Distrito Federal','Av. das Araucárias, Lote 1000',   '(61) 3000-0004','71936-250','Campus fictício')
 ) AS v(nome_campus, cidade, uf, endereco, telefone, cep, complementos)
 JOIN cidade ci ON ci.nome = v.cidade
-JOIN estado e  ON e.id_estado = ci.id_estado AND e.nome_estado = v.uf;
+JOIN estado e  ON e.id_estado = ci.id_estado AND e.nome_estado = v.uf
+WHERE NOT EXISTS (SELECT 1 FROM campus x WHERE x.nome_campus = v.nome_campus);
 
 -- CROSS JOIN com generate_series: 3 prédios por campus  (4 x 3 = 12)
 INSERT INTO predio (id_campus, qtd_predios)
 SELECT c.id_campus, 3
 FROM campus c
 CROSS JOIN generate_series(1, 3) AS g(n)
+WHERE NOT EXISTS (SELECT 1 FROM predio)
 ORDER BY c.id_campus, g.n;
 
 -- 4 blocos por prédio  (12 x 4 = 48)
@@ -604,6 +636,7 @@ INSERT INTO bloco (id_predio)
 SELECT p.id_predio
 FROM predio p
 CROSS JOIN generate_series(1, 4) AS g(n)
+WHERE NOT EXISTS (SELECT 1 FROM bloco)
 ORDER BY p.id_predio, g.n;
 
 -- 25 salas por bloco  (48 x 25 = 1.200 salas)
@@ -621,6 +654,7 @@ SELECT b.id_bloco,
             ELSE                   40 + (g.n % 3) * 5 END
 FROM bloco b
 CROSS JOIN generate_series(1, 25) AS g(n)
+WHERE NOT EXISTS (SELECT 1 FROM sala)
 ORDER BY b.id_bloco, g.n;
 
 -- UPDATE ... FROM com JOIN: recalcula qtd_blocos e salas de cada campus
@@ -650,7 +684,8 @@ FROM (VALUES
   ('2160','Análise e Desenvolvimento de Sistemas',  'Tecnólogo',  2000,'Campus Taguatinga'),
   ('2170','Engenharia da Computação',               'Bacharelado',3600,'Campus Águas Claras')
 ) AS v(codigo, nome, grau, ch_total, campus)
-JOIN campus c ON c.nome_campus = v.campus;
+JOIN campus c ON c.nome_campus = v.campus
+WHERE NOT EXISTS (SELECT 1 FROM curso x WHERE x.codigo = v.codigo);
 
 -- UNION entre "campus de origem do curso" e "cursos ofertados em todos os campi"
 INSERT INTO campus_curso (fk_id_campus, fk_id_curso)
@@ -661,13 +696,15 @@ UNION
 SELECT c.id_campus, cu.id_curso
 FROM campus c
 CROSS JOIN curso cu
-WHERE cu.codigo IN ('2130','2150');
+WHERE cu.codigo IN ('2130','2150')
+ON CONFLICT DO NOTHING;
 
 -- Cada curso ganha 2 currículos: 2016 (inativo) e 2020 (ativo)
 INSERT INTO curriculo (id_curso, ano_vigencia, ativo)
 SELECT cu.id_curso, v.ano, v.ativo
 FROM curso cu
 CROSS JOIN (VALUES (2016, false), (2020, true)) AS v(ano, ativo)
+WHERE NOT EXISTS (SELECT 1 FROM curriculo x WHERE x.id_curso = cu.id_curso AND x.ano_vigencia = v.ano)
 ORDER BY cu.id_curso, v.ano;
 
 -- Disciplinas (código CC001, CC002... em ordem de semestre e nome)
@@ -680,6 +717,7 @@ SELECT 'CC' || lpad((row_number() OVER (ORDER BY m.periodo, m.nome))::text, 3, '
        'Ementa da disciplina ' || m.nome || ': conteúdo programático do ' || m.periodo || 'º semestre, '
          || m.ch_t || 'h teóricas e ' || m.ch_p || 'h práticas.'
 FROM tmp_matriz m
+WHERE NOT EXISTS (SELECT 1 FROM disciplina)
 ORDER BY m.periodo, m.nome;
 
 -- Currículo x disciplina
@@ -692,7 +730,8 @@ FROM curriculo cu
 JOIN curso c       ON c.id_curso = cu.id_curso
 JOIN tmp_matriz m  ON (c.codigo = '2130' OR m.periodo <= 4)
 JOIN disciplina d  ON d.nome = m.nome
-ORDER BY cu.id_curriculo, m.periodo, d.codigo;
+ORDER BY cu.id_curriculo, m.periodo, d.codigo
+ON CONFLICT DO NOTHING;
 
 -- Pré/co-requisitos: dois JOINs na MESMA tabela (auto-relacionamento),
 -- um para a disciplina e outro para o requisito.
@@ -740,7 +779,8 @@ FROM (VALUES
   ('Estágio Supervisionado II','Estágio Supervisionado I','PRE_REQUISITO')
 ) AS v(disciplina, requisito, vinculo)
 JOIN disciplina d ON d.nome = v.disciplina
-JOIN disciplina r ON r.nome = v.requisito;
+JOIN disciplina r ON r.nome = v.requisito
+ON CONFLICT DO NOTHING;
 
 -- ----------------------------------------------------------------------------
 -- 4. PROFESSORES (80) - nomes combinados por JOIN com as listas temporárias
@@ -761,7 +801,8 @@ CROSS JOIN dim
 JOIN tmp_nome      n  ON n.rn  = 1 + g.n % dim.qn
 JOIN tmp_sobrenome s1 ON s1.rn = 1 + (g.n / dim.qn) % dim.qs
 JOIN tmp_sobrenome s2 ON s2.rn = 1 + (g.n + g.n / (dim.qn * dim.qs)) % dim.qs
-ORDER BY g.n;
+ORDER BY g.n
+ON CONFLICT (matricula) DO NOTHING;
 
 -- ----------------------------------------------------------------------------
 -- 5. PERÍODOS LETIVOS (2023/1 a 2026/2) E TURMAS
@@ -774,6 +815,7 @@ SELECT a.ano, s.semestre,
                         CASE s.semestre WHEN 1 THEN 30 ELSE 15 END)
 FROM generate_series(2023, 2026) AS a(ano)
 CROSS JOIN generate_series(1, 2) AS s(semestre)
+WHERE NOT EXISTS (SELECT 1 FROM periodo_letivo x WHERE x.ano = a.ano AND x.semestre = s.semestre)
 ORDER BY a.ano, s.semestre;
 
 -- Turmas: em cada período letivo são ofertadas as disciplinas do currículo ATIVO
@@ -803,6 +845,7 @@ SELECT b.id_disciplina, p.id_professor, b.id_periodo_letivo, b.turno,
 FROM base b
 CROSS JOIN qtd
 JOIN prof p ON p.rn = 1 + (b.rn - 1) % qtd.q
+WHERE NOT EXISTS (SELECT 1 FROM turma)
 ORDER BY b.rn;
 
 -- ----------------------------------------------------------------------------
@@ -824,7 +867,8 @@ CROSS JOIN dim
 JOIN tmp_nome      n  ON n.rn  = 1 + g.n % dim.qn
 JOIN tmp_sobrenome s1 ON s1.rn = 1 + (g.n / dim.qn) % dim.qs
 JOIN tmp_sobrenome s2 ON s2.rn = 1 + (g.n + g.n / (dim.qn * dim.qs)) % dim.qs
-ORDER BY g.n;
+ORDER BY g.n
+ON CONFLICT (cpf) DO NOTHING;
 
 -- ----------------------------------------------------------------------------
 -- 7. MATRÍCULAS
@@ -872,7 +916,8 @@ JOIN pl      ON pl.rk = pn.rk_inicio + pn.j
 JOIN oferta o ON o.id_periodo_letivo = pl.id_periodo_letivo
              AND o.periodo = pn.periodo_inicio + pn.j
              AND o.turno   = CASE WHEN (pn.rn / 2) % 2 = 0 THEN 'Matutino' ELSE 'Noturno' END
-ORDER BY pn.id_aluno, pl.rk, o.id_turma;
+ORDER BY pn.id_aluno, pl.rk, o.id_turma
+ON CONFLICT ON CONSTRAINT uq_matricula_aluno_turma DO NOTHING;
 
 -- ----------------------------------------------------------------------------
 -- 8. HISTÓRICO (1:1 com matrícula)
@@ -906,6 +951,7 @@ SELECT c.id_matricula,
        CASE WHEN c.status IN ('ATIVA','TRANCADA') THEN NULL ELSE c.media END,
        CASE WHEN c.status = 'TRANCADA' THEN NULL ELSE c.freq END
 FROM calc c
+WHERE NOT EXISTS (SELECT 1 FROM historico h0 WHERE h0.id_matricula = c.id_matricula)
 ORDER BY c.id_matricula;
 
 -- ----------------------------------------------------------------------------
@@ -917,6 +963,7 @@ INSERT INTO feriado (descricao, data)
 SELECT f.descricao, make_date(a.ano, f.mes, f.dia)
 FROM tmp_feriado f
 CROSS JOIN generate_series(2023, 2026) AS a(ano)
+WHERE NOT EXISTS (SELECT 1 FROM feriado x WHERE x.descricao = f.descricao AND x.data = make_date(a.ano, f.mes, f.dia))
 ORDER BY 2, 1;
 
 -- JOIN triplo: lista temporária -> país (pelo nome) -> feriado (por descrição+data)
@@ -926,7 +973,8 @@ FROM tmp_feriado f
 JOIN pais p      ON p.nome_pais = f.pais
 JOIN feriado fe  ON fe.descricao = f.descricao
                 AND EXTRACT(MONTH FROM fe.data) = f.mes
-                AND EXTRACT(DAY   FROM fe.data) = f.dia;
+                AND EXTRACT(DAY   FROM fe.data) = f.dia
+ON CONFLICT DO NOTHING;
 
 -- ----------------------------------------------------------------------------
 -- 10. AUDITORIA (log_matricula)
@@ -942,6 +990,7 @@ SELECT m.id_matricula,
 FROM matricula m
 JOIN aluno a ON a.id_aluno = m.id_aluno
 JOIN turma t ON t.id_turma = m.id_turma
+WHERE NOT EXISTS (SELECT 1 FROM log_matricula l WHERE l.id_matricula = m.id_matricula AND l.acao = 'INSERT')
 ORDER BY m.id_matricula;
 
 -- 10.2 Lançamento de notas no fim do período (histórico -> matrícula -> turma -> professor -> período)
@@ -958,6 +1007,7 @@ JOIN turma t           ON t.id_turma = m.id_turma
 JOIN professor p       ON p.id_professor = t.id_professor
 JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
 WHERE m.status = 'CONCLUIDA'
+  AND NOT EXISTS (SELECT 1 FROM log_matricula l WHERE l.id_matricula = m.id_matricula AND l.acao = 'LANCAMENTO_NOTAS')
 ORDER BY m.id_matricula;
 
 -- 10.3 Trancamentos
@@ -972,9 +1022,8 @@ JOIN aluno a           ON a.id_aluno = m.id_aluno
 JOIN turma t           ON t.id_turma = m.id_turma
 JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
 WHERE m.status = 'TRANCADA'
+  AND NOT EXISTS (SELECT 1 FROM log_matricula l WHERE l.id_matricula = m.id_matricula AND l.acao = 'TRANCAMENTO')
 ORDER BY m.id_matricula;
-
-COMMIT;
 
 -- Atualiza as estatísticas do otimizador para as consultas do próximo arquivo
 ANALYZE;
@@ -1010,14 +1059,9 @@ FROM (
 ORDER BY linhas DESC;
 
 
-
--- ============================================================================
--- BANCO DE DADOS II - CONSULTAS DEMONSTRATIVAS (SELECT + JOIN)
--- Execute DEPOIS de 1_ddl.sql e 2_dml_inserts.sql.
--- No pgAdmin, selecione UMA consulta por vez (marque o texto) e aperte F5.
--- ============================================================================
-
-SET search_path TO academico, public;
+-- ############################################################################
+-- PARTE 3 - CONSULTAS DEMONSTRATIVAS (cada uma roda separada)
+-- ############################################################################
 
 -- =====================================================================
 -- C1. Grade de turmas do último período letivo
@@ -1028,6 +1072,7 @@ SET search_path TO academico, public;
 -- Como ler: "para cada turma do último período, mostre código, disciplina,
 -- professor, turno e o semestre do curso em que a disciplina está".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT t.codigo                       AS turma,
        d.nome                         AS disciplina,
        p.nome                         AS professor,
@@ -1052,6 +1097,7 @@ ORDER BY cd.periodo, d.nome, t.turno;
 -- Como ler: "para o aluno de id 1, liste cada disciplina cursada com notas,
 -- média, frequência e situação, na ordem cronológica".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT a.nome                         AS aluno,
        pl.ano || '/' || pl.semestre   AS periodo,
        d.nome                         AS disciplina,
@@ -1072,6 +1118,7 @@ ORDER BY pl.ano, pl.semestre, d.nome;
 -- sala -> bloco -> prédio -> campus -> cidade -> estado -> país.
 -- Como ler: "mostre, por sala, onde ela fica no mundo".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT pa.nome_pais, e.nome_estado, ci.nome AS cidade, ca.nome_campus,
        pr.id_predio AS predio, b.id_bloco AS bloco,
        s.codigo AS sala, s.tipo, s.capacidade
@@ -1092,6 +1139,7 @@ LIMIT 50;
 -- (d = a disciplina, r = o requisito). pre_requisito faz a ponte.
 -- Como ler: "para cada disciplina, quais outras precisam vir antes (ou junto)".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT d.codigo  AS cod_disciplina,
        d.nome    AS disciplina,
        pr.vinculo,
@@ -1108,6 +1156,7 @@ ORDER BY d.codigo, pr.vinculo, r.codigo;
 -- disciplinas; as que não acharam par em pre_requisito ficam com NULL.
 -- Como ler: "quais disciplinas podem ser cursadas sem depender de outra".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT d.codigo, d.nome, d.ch_total
 FROM disciplina d
 LEFT JOIN pre_requisito pr ON pr.id_disciplina = d.id_disciplina
@@ -1119,6 +1168,7 @@ ORDER BY d.codigo;
 -- Técnica: JOIN + GROUP BY com string_agg() e SUM().
 -- Como ler: "por semestre do currículo ativo, liste as disciplinas e some a CH".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT cd.periodo                                   AS semestre,
        COUNT(*)                                     AS qtd_disciplinas,
        SUM(d.ch_total)                              AS ch_semestre,
@@ -1137,6 +1187,7 @@ ORDER BY cd.periodo;
 -- Só entram matrículas com resultado final (exclui CURSANDO e TRANCADO).
 -- Como ler: "das matrículas encerradas, qual % foi aprovada em cada disciplina".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT d.nome                                                   AS disciplina,
        COUNT(*)                                                 AS matriculas,
        COUNT(*) FILTER (WHERE h.situacao = 'APROVADO')          AS aprovados,
@@ -1158,6 +1209,7 @@ ORDER BY pct_aprovacao ASC, d.nome;
 -- Técnica: LEFT JOIN para incluir também professores sem turma (contam 0).
 -- Como ler: "quantas turmas e quantos alunos distintos cada professor atendeu".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT p.matricula, p.nome, p.titulacao,
        COUNT(DISTINCT t.id_turma) AS turmas,
        COUNT(m.id_matricula)      AS matriculas,
@@ -1176,6 +1228,7 @@ LIMIT 20;
 -- por isso soma 1 para virar posição de vetor (que começa em 1).
 -- Como ler: "para cada país, datas de feriado em 2026 e em que dia caem".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT pa.nome_pais,
        f.descricao,
        f.data,
@@ -1191,6 +1244,7 @@ ORDER BY pa.nome_pais, f.data;
 -- Técnica: JOIN sem chave estrangeira - condição por intervalo (BETWEEN).
 -- Como ler: "quais feriados do Brasil ocorrem dentro de cada período letivo".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT pl.ano || '/' || pl.semestre AS periodo,
        COUNT(*)                     AS feriados_no_periodo,
        string_agg(to_char(f.data, 'DD/MM'), ', ' ORDER BY f.data) AS datas
@@ -1206,6 +1260,7 @@ ORDER BY pl.ano, pl.semestre;
 -- Técnica: JOIN de 5 tabelas, ligando o log ao aluno e à disciplina.
 -- Como ler: "linha do tempo de tudo que aconteceu com cada matrícula do aluno 1".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT l.ocorrido_em, l.acao, l.usuario, a.nome AS aluno, d.nome AS disciplina, l.detalhe
 FROM log_matricula l
 JOIN matricula m  ON m.id_matricula = l.id_matricula
@@ -1220,6 +1275,7 @@ ORDER BY l.ocorrido_em, l.id_log;
 -- Técnica: JOIN + GROUP BY + HAVING + função de janela RANK().
 -- Como ler: "alunos com pelo menos 10 disciplinas aprovadas, ordenados pela média".
 -- =====================================================================
+SET search_path TO academico, public;
 SELECT RANK() OVER (ORDER BY AVG(h.media_final) DESC) AS posicao,
        a.nome,
        COUNT(*)                     AS disciplinas_aprovadas,

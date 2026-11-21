@@ -114,11 +114,11 @@ PASSO B3 - CONECTAR NO BANCO
        Name ......... bd1   (pode ser qualquer nome)
   3. Aba  Connection:  preencha EXATAMENTE assim:
 
-       Host name/address ... host.docker.internal
-       Port ................ 5433
-       Maintenance database  postgres
-       Username ............ postgres
-       Password ............ iesb2026
+       Host name/address ... bd2_postgres
+       Port ................ 5432
+       Maintenance database  matricula
+       Username ............ bd2
+       Password ............ bd2
 
   4. Marque  Save password.
   5. Clique em  Save.
