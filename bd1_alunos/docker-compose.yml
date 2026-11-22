@@ -1,0 +1,30 @@
+# Banco de Dados I — Prof. Rodrigo Gonçalves Pinto
+#
+# Subir:    docker compose up -d
+# Parar:    docker compose down      (os dados ficam guardados)
+# Zerar:    docker compose down -v   (APAGA todos os bancos criados)
+#
+# Conexão:  localhost / porta 5433 / usuario postgres / senha iesb2026
+#
+# O servidor sobe vazio, só com o banco "postgres".
+# Os bancos da disciplina são criados em aula, pelo script aulas/01_cria_bancos.sql.
+
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: bd1_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: iesb2026
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./aulas:/aulas:ro
+      - bd1_pgdata:/var/lib/postgresql/data
+
+volumes:
+  bd1_pgdata:
